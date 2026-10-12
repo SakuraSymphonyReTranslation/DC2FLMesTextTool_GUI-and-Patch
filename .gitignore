@@ -1,0 +1,9 @@
+obj/
+.vs/
+.venv/
+.idea/
+*.user
+*.suo
+bin/Debug/
+DC2FLPatch a/.venv/
+DC2FLPatch a/__pycache__/

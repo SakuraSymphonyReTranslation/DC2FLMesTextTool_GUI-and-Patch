@@ -1,0 +1,261 @@
+#include <iostream>
+#include <windows.h>
+#include <mes.hpp>
+#include <console.hpp>
+#include <scripts_handler.hpp>
+
+console::helper_t console::helper{ L"" PROJECT_NAME " v" PROJECT_VERSION };
+
+namespace mes_text_tool 
+{
+	static xstr::buffer<wchar_t> logs{};
+	inline static constexpr std::wstring_view information
+	{
+		L"----------------------------------------------------\n"
+		L"- " PROJECT_NAME " v" PROJECT_VERSION "(" PROJECT_BUILD_DATE ")" " by iTsukezigen.\n"
+		L"- GitHub: https://github.com/cokkeijigen/MesTextTool\n"
+	};
+
+	static auto get_value_from_exename(const wchar_t* args, bool& log, mes::unioninfo& info, uint32_t& cdpg) -> void
+	{
+		xstr::buffer<wchar_t> exename{ xfsys::path::name(args) };
+		const auto splits{ exename.to_lower().split_of(L'.', L'-', L'_') };
+
+		for (const auto& arg : std::ranges::reverse_view(splits)) 
+		{
+			if (info.empty())
+			{
+				const auto _arg{ xstr::cvt::to_utf8(arg) };
+				info = mes::script_info::query(_arg);
+				if (info.script_info() != nullptr)
+				{
+					continue;
+				}
+				info = mes::advtxt_info::get(_arg);
+				if (info.advtxt_info() != nullptr)
+				{
+					continue;
+				}
+			}
+
+			if (arg.starts_with(L"cp"))
+			{
+				auto value{ xstr::to_integer<uint32_t>(arg.substr(2)) };
+				if (value.has_value())
+				{
+					cdpg = value.value();
+				}
+				continue;
+			}
+			
+			if (arg == L"log")
+			{
+				log = true;
+			}
+		}
+	}
+
+	static auto get_value_from_argv(const int argc, const wchar_t* const argv[], bool& log, mes::unioninfo& info, uint32_t& cdpg)
+	{
+		for (size_t i = 1; i < argc - 1; i++)
+		{
+			std::wstring_view arg{ argv[i] };
+			if (arg.empty() || arg.size() == 1 || arg.front() != L'-')
+			{
+				continue;
+			}
+			else 
+			{
+				arg = arg.substr(1);
+			}
+
+			auto data{ const_cast<wchar_t*>(arg.data()) };
+			std::transform(data, data + arg.size(), data,
+				[](wchar_t c) -> wchar_t
+				{
+					return 
+					{
+						c >= L'A' && c <= L'Z' ?
+						static_cast<wchar_t>(c + 0x20) : c
+					};
+				}
+			);
+
+			if (arg.starts_with(L"cp"))
+			{
+				auto value{ xstr::to_integer<uint32_t>(arg.substr(2)) };
+				if (value.has_value())
+				{
+					cdpg = value.value();
+				}
+			}
+			else if (arg == L"log")
+			{
+				log = true;
+			}
+			else if (arg.starts_with(L"advtxt"))
+			{
+				const auto advtxt_info{ mes::advtxt::advtxt_info::parse(xstr::cvt::to_utf8(arg)) };
+				if (advtxt_info != nullptr)
+				{
+					info = advtxt_info;
+				}
+				else 
+				{
+					const xstr::str message
+					{
+						L"Error!!! Failed to parse ",
+						L"advtxt_info:\n\"", arg, L"\"\n"
+					};
+					mes_text_tool::logs.write(message);
+					xcout::helper.set_attrs(xcout::attrs::text_dark_red);
+					xcout::helper.writeline(message);
+					xcout::helper.reset_attrs();
+				}
+			}
+			else if (arg.starts_with(L"mes"))
+			{
+				const auto script_info{ mes::script_info::parse(xstr::cvt::to_utf8(arg)) };
+				if (script_info != nullptr)
+				{
+					info = script_info;
+				}
+				else 
+				{
+					const xstr::str message
+					{
+						L"Error!!! Failed to parse ",
+						L"script_info:\n\"",
+						arg, L"\"\n"
+					};
+					mes_text_tool::logs.write(message);
+					xcout::helper.set_attrs(xcout::attrs::text_dark_red);
+					xcout::helper.writeline(message);
+					xcout::helper.reset_attrs();
+				}
+			}
+			else
+			{
+				const auto __arg{ xstr::cvt::to_utf8(arg) };
+				const auto script_info{ mes::script_info::query(__arg) };
+				if (script_info != nullptr)
+				{
+					info = script_info;
+					continue;
+				}
+
+				const auto advtxt_info{ mes::advtxt_info::get(__arg) };
+				if (advtxt_info != nullptr)
+				{
+					info = advtxt_info;
+					continue;
+				}
+			}
+		}
+	}
+
+	static auto main(const int argc, const wchar_t* const argv[]) -> void
+	{
+
+		double time{};
+
+		if (argc < 2)
+		{
+			constexpr const char message[]
+			{
+				"[ILLEGAL PARAMETER] \n"
+				"At least 1 or 2 valid parameters are required.\n"
+				"Args: [-LOG <option>] [-CP <option>] [-GAME <option>] [PATH <must>]\n"
+				"Example: MesTextTool.exe -log -cp932 -dc2fl "
+				"D:\\YourGames\\DC2FL\\Advdata\\MES\n"
+			};
+
+			xcout::helper.set_attrs(console::attrs::text_dark_red);
+			xcout::helper.writeline(message);
+		}
+		else 
+		{
+			bool enable_console_log{ false };
+			mes::unioninfo input_script_info{};
+			uint32_t input_code_page{ mes::scripts::defualt_code_page };
+
+			get_value_from_exename(argv[0], enable_console_log, input_script_info, input_code_page);
+			get_value_from_argv(argc, argv, enable_console_log, input_script_info, input_code_page);
+
+			const std::wstring_view  input_path{ argv[argc - 1] };
+			const std::wstring_view output_path{ xfsys::path::parent(argv[0]) };
+
+			mes::scripts::handler handler{ input_path, output_path };
+
+			handler.set_script_info(input_script_info);
+			handler.set_mes_code_page(input_code_page);
+
+			if (!enable_console_log)
+			{
+				xcout::helper.writeline("[PROCESSING]...\n");
+			}
+
+			time = handler.process
+			(
+				[&](mes::scripts::handler::message_level level, std::wstring_view message) -> void
+				{
+					mes_text_tool::logs.write(message).write(L'\n');
+
+					if (!enable_console_log)
+					{
+						return;
+					}
+
+					switch (level)
+					{
+					case mes::scripts::handler::message_level::normal:
+					{
+						xcout::helper.writeline(message);
+						break;
+					}
+					case mes::scripts::handler::message_level::warning:
+					{
+						xcout::helper.set_attrs(xcout::attrs::text_yellow);
+						xcout::helper.writeline(message);
+						break;
+					}
+					case mes::scripts::handler::message_level::error:
+					{
+						xcout::helper.set_attrs(xcout::attrs::text_dark_red);
+						xcout::helper.writeline(message);
+						break;
+					}
+					};
+					xcout::helper.reset_attrs();
+				}
+			);
+
+			if (!enable_console_log)
+			{
+				xcout::helper.clear();
+				xcout::helper.writeline("[COMPLETE]\n");
+			}
+
+			mes_text_tool::logs.write(information);
+			mes_text_tool::logs.write_as_format(L"- Time: %llfs\n", time);
+			const xfsys::file file{ xfsys::create(output_path, L"output.log") };
+			file.write(mes_text_tool::logs.u8string(), xfsys::file::pos::begin);
+			mes_text_tool::logs.clear();
+		}
+
+		xcout::helper.reset_attrs();
+		xcout::helper.write(information);
+		xcout::helper.write(L"- Time: %llfs\n", time);
+		xcout::helper.read_anykey();
+	}
+
+	extern "C" auto main(void) -> int 
+	{
+		int argc{};
+		const auto cmds{ ::GetCommandLineW() };
+		const auto argv{ ::CommandLineToArgvW(cmds, &argc) };
+		mes_text_tool::main(argc, argv);
+
+		return { 0x114514 };
+	}
+}

@@ -1,0 +1,10 @@
+MES JSON Tool - D.C.II Fall in Love Script Tool
+
+Usage:
+  DC2FLMesTextTool_GUI.exe import <json_file> <original_mes> [output_mes] [-w <width>]
+  DC2FLMesTextTool_GUI.exe export <mes_file> [output_json]
+  DC2FLMesTextTool_GUI.exe batch-import <json_dir> <mes_dir> [output_dir] [-w <width>]
+  DC2FLMesTextTool_GUI.exe batch-export <mes_dir> [output_dir]
+
+Options:
+  -w, --wrap <width>  Word wrap width (default: 70, 0 to disable)
