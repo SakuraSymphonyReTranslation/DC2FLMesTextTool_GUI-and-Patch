@@ -13,6 +13,8 @@ Unduh kedua paket terbaru dari [GitHub Releases](https://github.com/SakuraSympho
 - **DC2FLMesTextTool_GUI.rar**: Importer/exporter MES ↔ JSON (GUI dan CLI), termasuk dokumentasi bahasa Indonesia dan Inggris.
 - **Released_patch.rar**: Launcher kustom berikon IconGroup105, DLL patch, konfigurasi INI, reference executable, dan library Locale Emulator.
 
+Kedua paket tersedia pada release **v1.0.0**. Paket terbaru menyertakan perbaikan layout pilihan berawalan `○` dan dokumentasi yang diperbarui.
+
 `<GAME_DIR>` berarti **folder utama instalasi game pilihan pemain**, yaitu folder yang berisi `DC2FL.EXE` dan `AdvData`. Ini placeholder dokumentasi: ganti dengan lokasi instalasi game Anda di komputer (misalnya `C:\Games\DC2FL` atau folder pilihan lainnya), tanpa tanda `<` dan `>`. Tidak ada drive atau lokasi instalasi wajib.
 
 ### Langkah Instalasi Patch
@@ -119,6 +121,14 @@ DisableBacklogTranslation=0
 - **Redirection**: `EnableFileRedirection=1` mengalihkan pembacaan naskah ke folder terjemahan `id_Data\MES` atau `eng_data\MES` tanpa menimpa arsip asli game.
 - **Backlog Icons**: `ShowBacklogIcon=1` mempertahankan dan menyesuaikan rendering ikon pembicara di backlog game.
 
+### Layout Pilihan `○`
+
+- Pilihan terjemahan berawalan `○` menggunakan huruf proporsional dengan jarak kata normal. Spasi berlebih dan pemisah `~` dari impor lama dirapikan saat dirender.
+- Posisi lingkaran mengikuti batas tombol asli, dengan inset kiri **16 piksel**. Awal teks sejajar antar pilihan; ukuran font menyesuaikan jika kalimat terlalu panjang.
+- Pada tombol selebar **480 piksel**, tersedia **448 piksel** untuk lingkaran dan teks. Latar tombol, area klik, warna, dan bayangan tetap mengikuti game.
+- Perbaikan berlaku melalui `DC2FLPatch.dll`. Jika MES terjemahan sudah terpasang, cukup perbarui DLL saat game ditutup; **tidak perlu memperbarui importer/exporter atau mengimpor ulang JSON → MES**.
+- Tanda `○` dapat langsung diikuti teks atau satu spasi, misalnya `○Pilihan pertama` dan `○ Pilihan kedua`. Tidak perlu menambahkan spasi untuk mengatur posisi. Pengaturan ukuran popup konfirmasi dan kotak dialog tetap sama.
+
 Petunjuk teknis patch dan build C++ tersedia di [README Patch](DC2FLPatch%20a/README.md).
 
 ## Validasi dan Encoding
@@ -144,6 +154,9 @@ Dari folder executable (`bin\Release\net8.0-windows` atau folder hasil ekstrak R
 ## Hasil Verifikasi
 
 - Format ekspor dan impor naskah telah diverifikasi terhadap skenario asli DC2FL.
+- Audit 386 JSON terjemahan menemukan **54 entri pilihan** dalam 23 file; jumlah pilihan per file cocok dengan MES terpasang.
+- **108 uji render** (54 JSON + 54 MES) dan 9 kasus pengecualian lulus. Semua teks pilihan muat dalam 448 piksel, dengan lebar bitmap maksimum 445 piksel.
+- Log runtime mengonfirmasi posisi baru pada dua menu contoh (5 label). Cakupan 54 pilihan berasal dari uji render; pengujian visual setiap pilihan dan keadaan hover belum lengkap.
 - Executable referensi game yang diuji memiliki hash SHA-256:
 
 ```text

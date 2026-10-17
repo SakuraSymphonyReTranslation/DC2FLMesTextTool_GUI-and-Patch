@@ -13,6 +13,7 @@ DC2FLPatch a/
 ├── icon.ico              # DC2FL game icon (IconGroup 105)
 ├── src/
 │   ├── dc2flpatch.cpp    # Main patch hook DLL code (injected version)
+│   ├── choice_layout.h   # Normalization and proportional rendering of ○ choices
 │   ├── launcher.cpp      # DC2FLLauncher source code (DLL injection + Locale Emulator)
 │   ├── launcher.rc       # Launcher resources (icon & metadata)
 │   ├── d3dx9_proxy.cpp   # Optional D3DX9 proxy
@@ -26,6 +27,8 @@ DC2FLPatch a/
 ## Installation
 
 Download `Released_patch.rar` from [GitHub Releases](https://github.com/SakuraSymphonyReTranslation/DC2FLMesTextTool_GUI-and-Patch/releases/latest), or use the files under `build/Released`.
+
+The release version remains **v1.0.0**. To apply the choice fix to an existing patch installation, close the game and replace `DC2FLPatch.dll` with the latest version. Existing INI settings and translated MES files can be kept; no JSON → MES reimport is needed.
 
 `<GAME_DIR>` denotes the **main game installation folder chosen by the player**, specifically the folder containing `DC2FL.EXE` and `AdvData`. Replace this placeholder with your actual game folder path; no specific drive is required.
 
@@ -50,10 +53,20 @@ aacb2192b8ab89d77ebc08addf10d993a1bd2401fc11e93389c2f917a0d079eb  DC2FL.EXE
   Ensures clean proportional Latin/Indonesian font rendering without character crowding or overlap.
 - **Backlog & Popups**:
   `ShowBacklogIcon=1` maintains speaker portrait icons in the backlog and centers system confirmation popups.
+- **Choices `○`**:
+  Circles follow the button edge with a 16-pixel inset. Labels use proportional text, normal word spacing, and font sizes from 28 down to 18 pixels as needed. A 480-pixel button provides 448 pixels for the circle and text. Confirmation popup and dialogue box sizes remain unchanged.
 - **File Redirection**:
   `EnableFileRedirection=1` routes MES script reads to `id_Data\MES` or `eng_data\MES`.
 - **Locale Emulator**:
   Integrated directly into the launcher for Windows native execution and fully compatible with Wine / Proton on Linux / Steam Deck.
+
+## Choice Layout Verification
+
+- 54 choices from 386 translated JSON files were tested alongside 54 labels from installed MES files: **108 render fixtures and 9 exclusion cases passed**.
+- Maximum bitmap width was 445/448 pixels; fixtures used font sizes of 22–28 pixels.
+- Game logs confirm two sample menus containing 5 labels. All 54 choices have not been individually checked in-game; hover verification is not yet complete.
+
+`src/choice_layout.h` handles CP932 normalization, spaces, and rasterization. `src/dc2flpatch.cpp` matches each label to its native button rectangle. The original label clip depends on text length, so the clip is expanded only while drawing the choice and restored afterward. Popup and dialogue settings are unchanged.
 
 ## Building (Visual Studio 2022, x86 Native Tools)
 

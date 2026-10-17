@@ -17,6 +17,9 @@
 #include <string_view>
 #include <vector>
 #include <ctype.h>
+#if defined(GAME_DC2FL)
+#include "choice_layout.h"
+#endif
 
 static constexpr const char *kGameRegistryKeyA = "DC2FL";
 static constexpr const wchar_t *kGameRegistryKeyW = L"DC2FL";
@@ -11155,6 +11158,7 @@ static void(__cdecl *DrawSystemGlyph_EAA0)(int, int, const BYTE *, int) = NULL;
 
 static void(__cdecl *Real_SystemLabel_1BDF0)(int, int, int, const char *, int) = NULL;
 static thread_local bool g_suppressSystemPopupGlyphs = false;
+static thread_local bool g_suppressSystemChoiceGlyphs = false;
 
 struct PopupLabelBitmap {
   int width = 0;
@@ -11295,8 +11299,119 @@ static bool BuildSystemPopupBitmap(const std::string &label,
 
 static void __cdecl Hook_SystemText_EF80(int x, int y, const char *text,
                                          int color, int size) {
-  if (!g_suppressSystemPopupGlyphs)
+  if (!g_suppressSystemPopupGlyphs && !g_suppressSystemChoiceGlyphs)
     Real_SystemText_EF80(x, y, text, color, size);
+}
+
+static bool FindSystemChoiceButton(BYTE *exe, int x, int y, RECT &button) {
+  // IDA: 412760 walks 880-byte menu items; each has 16 child records
+  // of 44 bytes. 41F6B0 draws a text child at (node[0]+1,node[1]+1).
+  // Its strlen-based clip is NOT the button rectangle.
+  const int *items = *(const int **)(exe + 0x1385FC);
+  const int count = *(const int *)(exe + 0x673B88);
+  if (count <= 0 || count > 128 ||
+      !IsReadablePtr(items, (size_t)count * 880))
+    return false;
+  for (int i = 0; i < count; ++i) {
+    const int *item = items + i * 220;
+    RECT bounds = {item[3], item[4], item[5], item[6]};
+    if (bounds.left < 0 || bounds.right > 800 || bounds.top < 0 ||
+        bounds.bottom > 600 || bounds.right - bounds.left < 250 ||
+        bounds.right - bounds.left > 768 || bounds.bottom - bounds.top < 28 ||
+        bounds.bottom - bounds.top > 96 || x < bounds.left || x >= bounds.right ||
+        y < bounds.top || y + ChoiceLayout::kHeight > bounds.bottom)
+      continue;
+    for (int child = 0; child < 16; ++child) {
+      const int *node = item + 13 + child * 11;
+      if (node[-1] == -1)
+        break;
+      if (!(node[-1] & 0x80) && node[8] && node[0] == x - 1 && node[1] == y - 1) {
+        button = bounds;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+static bool TryRenderSystemChoice(int x, int y, int lineHeight,
+                                   const char *text, int style) {
+  if (g_fontManager.GetLanguage() == 0 || !DrawSystemGlyph_EAA0 ||
+      g_inBacklogRender || g_suppressSystemPopupGlyphs ||
+      g_suppressSystemChoiceGlyphs || !text || y < 40 || y > 382)
+    return false;
+  std::string encoded;
+  bool terminated = false;
+  for (size_t i = 0; i < 1024; ++i) {
+    if (!IsReadablePtr(text + i, 1))
+      return false;
+    if (!text[i]) {
+      terminated = true;
+      break;
+    }
+    encoded.push_back(text[i]);
+  }
+  std::wstring body;
+  if (!terminated || !ChoiceLayout::Decode(encoded, body))
+    return false;
+
+  BYTE *exe = (BYTE *)GetModuleHandleA(NULL);
+  RECT button = {};
+  if (!FindSystemChoiceButton(exe, x, y, button)) {
+    LogHsxf4Probe("[CHOICE-LAYOUT] no matching menu button; keeping native rendering");
+    return false;
+  }
+  const int clipLeft = *(int *)(exe + 0x8E6E14);
+  const int clipTop = *(int *)(exe + 0x8E6E08);
+  const int clipRight = *(int *)(exe + 0x8E6E0C);
+  const int clipBottom = *(int *)(exe + 0x8E6E04);
+  const int drawX = button.left + ChoiceLayout::kInset;
+  const int maxWidth = button.right - button.left - 2 * ChoiceLayout::kInset;
+  using Key = std::pair<std::wstring, int>;
+  static thread_local std::map<Key, ChoiceLayout::Bitmap> cache;
+  Key key(body, maxWidth);
+  auto found = cache.find(key);
+  if (found == cache.end()) {
+    ChoiceLayout::Bitmap built;
+    if (!ChoiceLayout::Build(body, maxWidth, built, Real_GetTextExtentPoint32W,
+                             Real_GetGlyphOutlineW)) {
+      LogHsxf4Probe("[CHOICE-LAYOUT] label did not fit; keeping native rendering");
+      return false;
+    }
+    if (cache.size() >= 256)
+      cache.clear();
+    found = cache.emplace(std::move(key), std::move(built)).first;
+    char message[512];
+    std::string utf8 = DiagWideToUtf8(body.c_str());
+    sprintf_s(message, "[CHOICE-LAYOUT] text='%s' original=(%d,%d) button=(%ld,%ld,%ld,%ld) draw=(%d,%d) width=%d/%d font=%d",
+              utf8.c_str(), x, y, button.left, button.top, button.right, button.bottom,
+              drawX, y, found->second.width, maxWidth, found->second.fontSize);
+    LogHsxf4Probe(message);
+  }
+  // Preserve the original cursor/control processing, replacing only its glyphs.
+  g_suppressSystemChoiceGlyphs = true;
+  Real_SystemLabel_1BDF0(x, y, lineHeight, text, style);
+  g_suppressSystemChoiceGlyphs = false;
+  // Expand only this label's clip to its parent button, respecting the native
+  // outer clip. Restore immediately, so later UI and dialogue are unaffected.
+  using SetClipFn = int(__cdecl *)(int, int, int, int);
+  auto setClip = reinterpret_cast<SetClipFn>(exe + 0xC2A0);
+  setClip(button.left, button.top, button.right, button.bottom);
+  const ChoiceLayout::Bitmap &bitmap = found->second;
+  auto draw = [&](int color, int offset) {
+    for (int start = 0; start < bitmap.width; start += 28) {
+      BYTE tile[28 * 28] = {};
+      int width = min(28, bitmap.width - start);
+      for (int row = 0; row < 28; ++row)
+        memcpy(tile + row * 28, bitmap.pixels.data() + row * bitmap.width + start, width);
+      DrawSystemGlyph_EAA0(drawX + start + offset, y + offset, tile, color);
+    }
+  };
+  if (style & 0x80)
+    draw((style & 0x3f) ? 0 : 9, 1);
+  draw(style & 0x3f, 0);
+  setClip(clipLeft, clipTop, clipRight, clipBottom);
+  return true;
 }
 
 static void DrawSystemPopupBitmap(const PopupLabelBitmap &bitmap, int color,
@@ -11316,6 +11431,8 @@ static void DrawSystemPopupBitmap(const PopupLabelBitmap &bitmap, int color,
 
 static void __cdecl Hook_SystemLabel_1BDF0(int x, int y, int lineHeight,
                                           const char *text, int style) {
+  if (TryRenderSystemChoice(x, y, lineHeight, text, style))
+    return;
   std::string label;
   const PopupLabelBitmap *bitmap = nullptr;
   // Match the entire known confirmation and its panel position. Other UI

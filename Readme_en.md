@@ -13,6 +13,8 @@ Download both packages from the latest [GitHub Releases](https://github.com/Saku
 - **DC2FLMesTextTool_GUI.rar**: MES ↔ JSON conversion tool (GUI and CLI), including Indonesian and English documentation.
 - **Released_patch.rar**: Custom launcher with IconGroup105 icon, patch DLL, INI configuration, reference executable, and Locale Emulator libraries.
 
+Both packages are available under release **v1.0.0**. The updated packages include the layout fix for choices beginning with `○` and refreshed documentation.
+
 `<GAME_DIR>` denotes the **main game installation folder chosen by the player**, specifically the folder containing `DC2FL.EXE` and `AdvData`. This is a documentation placeholder: replace it with your actual game folder path (such as `C:\Games\DC2FL` or wherever your game is installed), without `<` or `>`. There is no mandatory installation drive or fixed folder.
 
 ### Patch Installation Steps
@@ -119,7 +121,15 @@ DisableBacklogTranslation=0
 - **Redirection**: `EnableFileRedirection=1` reroutes script reads to `id_Data\MES` or `eng_data\MES` without modifying original game archives.
 - **Backlog Icons**: `ShowBacklogIcon=1` maintains and aligns character avatar icons in the game backlog window.
 
-Technical details and C++ patch building instructions are provided in the [Patch README](DC2FLPatch%20a/README.md).
+### Choice Layout `○`
+
+- Translated choices beginning with `○` use proportional text with normal word spacing. Extra spaces and legacy `~` separators are normalized while rendering.
+- The circle follows the original button bounds, with a **16-pixel** left inset. Text starts at the same position across choices; the font shrinks when a label is too long.
+- A **480-pixel** button provides **448 pixels** for the circle and text. Button backgrounds, hit areas, colors, and shadows retain their native behavior.
+- The fix is provided by `DC2FLPatch.dll`. If translated MES files are already installed, replace the DLL while the game is closed; **no importer/exporter update or JSON → MES reimport is required**.
+- The `○` marker may be followed directly by text or by one space, for example `○First choice` and `○ Second choice`. Do not add padding spaces to position labels. Confirmation popup and dialogue box size settings remain unchanged.
+
+Technical details and C++ patch building instructions are provided in the [Patch README](DC2FLPatch%20a/Readme_en.md).
 
 ## Validation and Encoding
 
@@ -144,6 +154,9 @@ From the executable folder (`bin\Release\net8.0-windows` or the extracted RAR fo
 ## Verification Results
 
 - Script export and import formats were validated against original DC2FL scenarios.
+- An audit of 386 translated JSON files found **54 choice entries** across 23 files; per-file choice counts match the installed MES files.
+- **108 render fixtures** (54 JSON + 54 MES) and 9 exclusion cases passed. All choice labels fit within 448 pixels, with a maximum bitmap width of 445 pixels.
+- Runtime logs confirm the new position in two sample menus (5 labels). Coverage of all 54 choices comes from render tests; visual checks of every choice and hover state are not yet complete.
 - The tested reference game executable has SHA-256 hash:
 
 ```text
